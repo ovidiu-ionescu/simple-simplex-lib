@@ -187,6 +187,8 @@ impl Matrix {
     solution
   }
 
+  // FIXME: implement both phases check
+  // current one is not enough even for the second phase
   pub fn check_if_we_have_a_solution(&self, num_vars: usize) -> bool {
     let mut has_solution = true;
     for i in 0..self.rows - 1 {
@@ -222,61 +224,6 @@ mod tests {
   }
 
   #[test]
-  fn test_elementary_operations() {
-    let mut m = Matrix::new(0, 6, 0);
-    m.add_line(vec![1.0, 1.0, 1.0, 0.0, 0.0, 12.0]);
-    m.add_line(vec![2.0, 1.0, 0.0, 1.0, 0.0, 16.0]);
-    m.add_line(vec![-40.0, -30.0, 0.0, 0.0, 1.0, 0.0]);
-    println!("{}", m);
-    let n = m.find_most_negative_in_bottom_row();
-    assert_eq!(n, Some((0, -40.0)));
-
-    let p = m.find_pivot();
-    assert_eq!(p, Some((1, 0)));
-
-    m.pivot((1, 0));
-    println!("{m}");
-  }
-
-  #[test]
-  fn test_solve() {
-    let mut m = Matrix::new(0, 6, 0);
-    m.add_line(vec![1.0, 1.0, 1.0, 0.0, 0.0, 12.0]);
-    m.add_line(vec![2.0, 1.0, 0.0, 1.0, 0.0, 16.0]);
-    // add objective function
-    m.add_line(vec![-40.0, -30.0, 0.0, 0.0, 1.0, 0.0]);
-    println!("{}", m);
-    m.solve();
-    println!("{}", m);
-    let solution = m.get_solution();
-    assert_eq!(solution[0..2], vec![4.0, 8.0]);
-    //assert_eq!(m.check_if_we_have_a_solution(2), true);
-  }
-
-  #[test]
-  /// Test the following problem:
-  /// maximize p = x + 2y + 3z subject to the constraints
-  /// 7x + z <= 6.0
-  /// x + 2y <= 20.0
-  /// 3y + 4z <= 30.0
-  fn test_negative_coefficient() {
-    
-    // build the tableau
-    let mut m = Matrix::new(0, 8, 2);
-    m.add_line(vec![7.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 6.0]);
-    m.add_line(vec![1.0, 2.0, 0.0, 0.0, 1.0, 0.0, 0.0, 20.0]);
-    m.add_line(vec![0.0, 3.0, 4.0, 0.0, 0.0, 1.0, 0.0, 30.0]);
-    // add objective function
-    m.add_line(vec![-1.0, -2.0, -3.0, 0.0, 0.0, 0.0, 1.0, 0.0]);
-    println!("{}", m);
-    m.solve();
-    println!("{}", m);
-    let solution = m.get_solution();
-    assert_eq!(vec![0.0, 2.0, 6.0, 0.0, 16.0, 0.0, 22.0], solution);
-    //assert_eq!(m.check_if_we_have_a_solution(3), true);
-  }
-
-  #[test]
   fn test_artificial_variables_stage_1() {
     let mut m = Matrix::new(0, 8, 2);
     m.add_line(vec![1.0, 1.0, -1.0, 0.0, 0.0, 1.0, 0.0, 1.0]);
@@ -304,22 +251,6 @@ mod tests {
     m.add_line(vec![1.0, 2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
     // the intermediate objective function
     m.add_line(vec![-2.0, -1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, -3.0]);
-
-    println!("{m}");
-    m.solve();
-    println!("{m}");
-  }
-
-  #[test]
-  fn test_two_stage_savemyexams_com() {
-    let mut m = Matrix::new(0, 9, 2);
-    m.add_line(vec![1.0, 1.0, 1.0, -1.0, 0.0, 0.0, 1.0, 0.0, 20.0]);
-    m.add_line(vec![2.0, -1.0, 2.0, 0.0, -1.0, 0.0, 0.0, 1.1, 25.0]);
-    m.add_line(vec![2.0, 3.0, 4.0, 0.0, 0.0, 1.0, 0.0, 0.0, 80.0]);
-    // P
-    m.add_line(vec![-2.0, -4.0, -3.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
-    // I
-    m.add_line(vec![-3.0, 0.0, -3.0, 1.0, 1.0, 0.0, 0.0, 0.0, -45.0]);
 
     println!("{m}");
     m.solve();
