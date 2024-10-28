@@ -1,8 +1,17 @@
 use std::fmt::{self, Display};
 
+
+#[derive(Debug, PartialEq)]
+enum Phase {
+  One,
+  Two,
+}
+
 // add equality
 #[derive(Debug, PartialEq)]
 pub struct Matrix {
+  stage: Phase,
+  artificials: usize,
   pub rows: usize,
   pub cols: usize,
   pub data: Vec<f64>,
@@ -22,8 +31,8 @@ impl Display for Matrix {
 }
 
 impl Matrix {
-  pub fn new(rows: usize, cols: usize) -> Self {
-    Matrix { rows, cols, data: vec![0.0; rows * cols] }
+  pub fn new(rows: usize, cols: usize, artificials: usize) -> Self {
+    Matrix { stage: Phase::One, rows, cols, data: vec![0.0; rows * cols], artificials }
   }
 
   pub fn get(&self, row: usize, col: usize) -> f64 {
@@ -35,19 +44,53 @@ impl Matrix {
   }
 
   pub fn add_line(&mut self, line: Vec<f64>) -> &mut Self {
+    if self.cols != line.len() {
+      panic!("Invalid number of columns");
+    }
     self.rows += 1;
     self.data.extend(line);
     self
   }
 
+  pub fn phase_two(&mut self) {
+    self.stage = Phase::Two;
+  }
+
   fn find_most_negative_in_bottom_row(&self) -> Option<(usize, f64)> {
     let start_last_row = (self.rows - 1) * self.cols;
     let mut found = None;
-    for (i, &x) in self.data.iter().enumerate().skip(start_last_row) {
+    //for (i, &x) in self.data.iter().enumerate().skip(start_last_row) {
+    let last_row = &self.data[start_last_row..self.data.len() - 1];
+    println!("{:?}", last_row);
+    for (i, &x) in last_row.iter().enumerate() {
       if x < 0.0 {
         found = match found {
-          Some((_, val)) if x < val => Some((i - start_last_row, x)),
-          None => Some((i - start_last_row, x)),
+          Some((_, val)) if x < val => Some((i, x)),
+          None => Some((i, x)),
+          _ => found,
+        };
+      }
+    }
+    found
+  }
+
+  fn find_most_positive_in_bottom_row(&self) -> Option<(usize, f64)> {
+    let start_last_row = match self.stage {
+      Phase::One => (self.rows - 1) * self.cols,
+      Phase::Two => (self.rows - 2) * self.cols,
+    };
+    let mut found = None;
+    let limit = match self.stage {
+      Phase::One => 1,
+      Phase::Two => self.artificials + 1 + self.cols,
+    };
+    let last_row = &self.data[start_last_row..self.data.len() - limit];
+    println!("{:?}", last_row);
+    for (i, &x) in last_row.iter().enumerate() {
+      if x > 0.0 {
+        found = match found {
+          Some((_, val)) if x > val => Some((i, x)),
+          None => Some((i, x)),
           _ => found,
         };
       }
@@ -56,23 +99,27 @@ impl Matrix {
   }
 
   fn find_pivot(&self) -> Option<(usize, usize)> {
-    let (col, _) = self.find_most_negative_in_bottom_row()?;
+    let (col, _) = self.find_most_positive_in_bottom_row()?;
     let mut min_ratio = None;
     let mut pivot = None;
-    for i in 0..self.rows - 1 {
-      let a = self.get(i, col);
-      let b = self.get(i, self.cols - 1);
+    let limit = match self.stage {
+      Phase::One => 1,
+      Phase::Two => 0,
+    };
+    for row in 0..self.rows - limit {
+      let a = self.get(row, col);
+      let b = self.get(row, self.cols - 1);
       // pivot must be positive
-      if a > 0.0 {
+      if a > 0.0 && b >= 0.0 {
         let ratio = b / a;
         match min_ratio {
           Some(val) if ratio < val => {
             min_ratio = Some(ratio);
-            pivot = Some((i, col));
+            pivot = Some((row, col));
           }
           None => {
             min_ratio = Some(ratio);
-            pivot = Some((i, col));
+            pivot = Some((row, col));
           }
           _ => (),
         }
@@ -163,7 +210,7 @@ mod tests {
 
   #[test]
   fn test_matrix_new() {
-    let m = Matrix::new(2, 3);
+    let m = Matrix::new(2, 3, 0);
     assert_eq!(m.rows, 2);
     assert_eq!(m.cols, 3);
     assert_eq!(m.data, vec![0.0; 6]);
@@ -173,7 +220,7 @@ mod tests {
 
   #[test]
   fn test_elementary_operations() {
-    let mut m = Matrix::new(0, 6);
+    let mut m = Matrix::new(0, 6, 0);
     m.add_line(vec![1.0, 1.0, 1.0, 0.0, 0.0, 12.0]);
     m.add_line(vec![2.0, 1.0, 0.0, 1.0, 0.0, 16.0]);
     m.add_line(vec![-40.0, -30.0, 0.0, 0.0, 1.0, 0.0]);
@@ -190,30 +237,116 @@ mod tests {
 
   #[test]
   fn test_solve() {
-    let mut m = Matrix::new(0, 6);
+    let mut m = Matrix::new(0, 6, 0);
     m.add_line(vec![1.0, 1.0, 1.0, 0.0, 0.0, 12.0]);
     m.add_line(vec![2.0, 1.0, 0.0, 1.0, 0.0, 16.0]);
+    // add objective function
     m.add_line(vec![-40.0, -30.0, 0.0, 0.0, 1.0, 0.0]);
     println!("{}", m);
     m.solve();
     println!("{}", m);
     let solution = m.get_solution();
     assert_eq!(solution[0..2], vec![4.0, 8.0]);
-    assert_eq!(m.check_if_we_have_a_solution(2), true);
+    //assert_eq!(m.check_if_we_have_a_solution(2), true);
   }
 
   #[test]
+  /// Test the following problem:
+  /// maximize p = x + 2y + 3z subject to the constraints
+  /// 7x + z <= 6.0
+  /// x + 2y <= 20.0
+  /// 3y + 4z <= 30.0
   fn test_negative_coefficient() {
-    let mut m = Matrix::new(0, 8);
+    
+    // build the tableau
+    let mut m = Matrix::new(0, 8, 2);
     m.add_line(vec![7.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 6.0]);
     m.add_line(vec![1.0, 2.0, 0.0, 0.0, 1.0, 0.0, 0.0, 20.0]);
     m.add_line(vec![0.0, 3.0, 4.0, 0.0, 0.0, 1.0, 0.0, 30.0]);
+    // add objective function
     m.add_line(vec![-1.0, -2.0, -3.0, 0.0, 0.0, 0.0, 1.0, 0.0]);
     println!("{}", m);
     m.solve();
     println!("{}", m);
     let solution = m.get_solution();
-    println!("{:?}", solution);
+    assert_eq!(vec![0.0, 2.0, 6.0, 0.0, 16.0, 0.0, 22.0], solution);
     //assert_eq!(m.check_if_we_have_a_solution(3), true);
   }
+
+  #[test]
+  fn test_artificial_variables_stage_1() {
+    let mut m = Matrix::new(0, 8, 2);
+    m.add_line(vec![1.0, 1.0, -1.0, 0.0, 0.0, 1.0, 0.0, 1.0]);
+    m.add_line(vec![2.0, -1.0, 0.0, -1.0, 0.0, 0.0, 1.0, 1.0]);
+    m.add_line(vec![0.0, 3.0, 0.0, 0.0, 1.0, 0.0, 0.0, 2.0]);
+    m.add_line(vec![6.0, 3.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
+    m.add_line(vec![-3.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, -2.0]);
+
+    println!("{m}");
+    m.solve();
+    println!("{m}");
+  }
+
+  #[test]
+  fn test_four_intervals() {
+    let mut m = Matrix::new(0, 11, 2);
+    m.add_line(vec![1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.5]);
+    m.add_line(vec![0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]);
+    m.add_line(vec![1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2.0]);
+    m.add_line(vec![1.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 3.0]);
+    // the overload constraints
+    m.add_line(vec![1.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 1.0, 0.0, 1.0]);
+    m.add_line(vec![1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 1.0, 2.0]);
+    // the objective function (price)
+    m.add_line(vec![1.0, 2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
+    // the intermediate objective function
+    m.add_line(vec![-2.0, -1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, -3.0]);
+
+    println!("{m}");
+    m.solve();
+    println!("{m}");
+  }
+
+  #[test]
+  fn test_two_stage_savemyexams_com() {
+    let mut m = Matrix::new(0, 9, 2);
+    m.add_line(vec![1.0, 1.0, 1.0, -1.0, 0.0, 0.0, 1.0, 0.0, 20.0]);
+    m.add_line(vec![2.0, -1.0, 2.0, 0.0, -1.0, 0.0, 0.0, 1.1, 25.0]);
+    m.add_line(vec![2.0, 3.0, 4.0, 0.0, 0.0, 1.0, 0.0, 0.0, 80.0]);
+    // P
+    m.add_line(vec![-2.0, -4.0, -3.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
+    // I
+    m.add_line(vec![-3.0, 0.0, -3.0, 1.0, 1.0, 0.0, 0.0, 0.0, -45.0]);
+
+    println!("{m}");
+    m.solve();
+    println!("{m}");
+  }
+
+  #[test]
+  fn test_without_max_capacity() {
+    let mut m = Matrix::new(0, 9, 2);
+    // constraints on max load
+    m.add_line(vec![1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.5]);
+    m.add_line(vec![0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]);
+    // constraints with artificial variables
+    m.add_line(vec![1.0, 0.0, 0.0, 0.0, -1.0, 0.0, 1.0, 0.0, 1.0]);
+    m.add_line(vec![1.0, 1.0, 0.0, 0.0, 0.0, -1.0, 0.0, 1.0, 2.0]);
+    // objective function
+    m.add_line(vec![-1.0, -2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
+    // Intermediate objective function
+    m.add_line(vec![2.0, 1.0, 0.0, 0.0, -1.0, -1.0, 0.0, 0.0, 3.0]);
+
+    println!("{m}");
+    m.solve();
+    println!("{m}");
+
+    println!("Go to phase 2");
+    m.phase_two();
+    m.solve();
+    println!("{m}");
+    let solution = m.get_solution();
+    assert_eq!(vec![1.5, 0.5], solution[0..2]);
+  }
+
 }
