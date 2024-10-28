@@ -1,3 +1,6 @@
+/// Implementation of two phase minimisation simplex algorithm
+/// Currently it starts from the tableau and solves the problem
+///
 use std::fmt::{self, Display};
 
 
@@ -10,7 +13,7 @@ enum Phase {
 // add equality
 #[derive(Debug, PartialEq)]
 pub struct Matrix {
-  stage: Phase,
+  phase: Phase,
   artificials: usize,
   pub rows: usize,
   pub cols: usize,
@@ -32,7 +35,7 @@ impl Display for Matrix {
 
 impl Matrix {
   pub fn new(rows: usize, cols: usize, artificials: usize) -> Self {
-    Matrix { stage: Phase::One, rows, cols, data: vec![0.0; rows * cols], artificials }
+    Matrix { phase: Phase::One, rows, cols, data: vec![0.0; rows * cols], artificials }
   }
 
   pub fn get(&self, row: usize, col: usize) -> f64 {
@@ -53,7 +56,7 @@ impl Matrix {
   }
 
   pub fn phase_two(&mut self) {
-    self.stage = Phase::Two;
+    self.phase = Phase::Two;
   }
 
   fn find_most_negative_in_bottom_row(&self) -> Option<(usize, f64)> {
@@ -75,12 +78,12 @@ impl Matrix {
   }
 
   fn find_most_positive_in_bottom_row(&self) -> Option<(usize, f64)> {
-    let start_last_row = match self.stage {
+    let start_last_row = match self.phase {
       Phase::One => (self.rows - 1) * self.cols,
       Phase::Two => (self.rows - 2) * self.cols,
     };
     let mut found = None;
-    let limit = match self.stage {
+    let limit = match self.phase {
       Phase::One => 1,
       Phase::Two => self.artificials + 1 + self.cols,
     };
@@ -102,7 +105,7 @@ impl Matrix {
     let (col, _) = self.find_most_positive_in_bottom_row()?;
     let mut min_ratio = None;
     let mut pivot = None;
-    let limit = match self.stage {
+    let limit = match self.phase {
       Phase::One => 1,
       Phase::Two => 0,
     };
@@ -323,8 +326,14 @@ mod tests {
     println!("{m}");
   }
 
-  #[test]
-  fn test_without_max_capacity() {
+  // Tableau for the following minimization problem:
+  // maximize p = x + 2y subject to the constraints
+  // x <= 1.5
+  // y <= 1
+  //
+  // x >= 1
+  // x + y >= 2
+  fn tableau_without_max_capacity() -> Matrix{
     let mut m = Matrix::new(0, 9, 2);
     // constraints on max load
     m.add_line(vec![1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.5]);
@@ -336,7 +345,37 @@ mod tests {
     m.add_line(vec![-1.0, -2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
     // Intermediate objective function
     m.add_line(vec![2.0, 1.0, 0.0, 0.0, -1.0, -1.0, 0.0, 0.0, 3.0]);
+    m
+  }
 
+  #[test]
+  fn test_without_max_capacity_individual_steps() {
+    let mut m = tableau_without_max_capacity();
+    let pivot = m.find_pivot();
+    assert_eq!(pivot, Some((2, 0)));
+    m.pivot(pivot.unwrap());
+    
+    let pivot = m.find_pivot();
+    assert_eq!(pivot, Some((1, 1)));
+    m.pivot(pivot.unwrap());
+
+    let pivot = m.find_pivot();
+    assert_eq!(pivot, Some((3, 4)));
+    m.pivot(pivot.unwrap());
+
+    // check intermediate objective function is zero
+    m.phase_two();
+    let pivot = m.find_pivot();
+    assert_eq!(pivot, Some((0, 3)));
+    m.pivot(pivot.unwrap());
+
+    let solution = m.get_solution();
+    assert_eq!(vec![1.5, 0.5], solution[0..2]);
+  }
+
+  #[test]
+  fn test_without_max_capacity() {
+    let mut m = tableau_without_max_capacity();
     println!("{m}");
     m.solve();
     println!("{m}");
