@@ -1,4 +1,4 @@
-# Two phase simplex Simplex
+# Two Phase Minimization Simplex
 
 The most basic implementation of the two phase minimization Simplex algorithm.
 
